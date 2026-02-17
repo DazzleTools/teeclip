@@ -16,8 +16,12 @@ Like Unix `tee`, but for your clipboard. Pipe any command's output to both stdou
 ## Features
 
 - **Tee-style pass-through**: stdin flows to stdout unmodified while being copied to clipboard
+- **Clipboard history**: Automatically saves piped content to a local SQLite database
+- **History recall**: Browse (`--list`), retrieve (`--get N`), and manage (`--clear`) past clips
+- **Optional encryption**: AES-256-GCM encryption for stored clips via `pip install teeclip[secure]`
+- **Configurable**: `~/.teeclip/config.toml` for persistent settings (history size, encryption, backend)
 - **Cross-platform**: Windows, macOS, Linux (X11 + Wayland), and WSL — auto-detected
-- **Zero dependencies**: Uses only Python stdlib and native OS clipboard commands
+- **Zero core dependencies**: Uses only Python stdlib and native OS clipboard commands
 - **File output too**: Supports writing to files just like standard `tee`
 - **Paste mode**: Read clipboard contents back to stdout with `--paste`
 
@@ -27,12 +31,18 @@ Like Unix `tee`, but for your clipboard. Pipe any command's output to both stdou
 pip install teeclip
 ```
 
+For encrypted clipboard history:
+
+```bash
+pip install teeclip[secure]
+```
+
 Or install from source:
 
 ```bash
 git clone https://github.com/DazzleTools/teeclip.git
 cd teeclip
-pip install -e .
+pip install -e ".[secure]"
 ```
 
 ## Usage
@@ -58,6 +68,21 @@ teeclip --paste | grep "error"
 
 # Skip clipboard (act as plain tee)
 echo test | teeclip --no-clipboard output.txt
+
+# Browse clipboard history
+teeclip --list
+
+# Retrieve the 2nd most recent clip
+teeclip --get 2
+
+# Save clipboard to history (for content copied outside teeclip)
+teeclip --save
+
+# Show current config
+teeclip --config
+
+# Encrypt all stored clips (requires teeclip[secure])
+teeclip --encrypt
 ```
 
 ## Platform Support
@@ -73,7 +98,10 @@ echo test | teeclip --no-clipboard output.txt
 ## Options
 
 ```
-usage: teeclip [-h] [-a] [--paste] [--backend NAME] [--no-clipboard] [-q] [-V] [FILE ...]
+usage: teeclip [-h] [-a] [--paste] [--backend NAME] [--no-clipboard] [-q]
+               [--list] [--list-count N] [--get N] [--clear] [--save]
+               [--config] [--no-history] [--encrypt] [--decrypt] [-V]
+               [FILE ...]
 
 positional arguments:
   FILE              also write to FILE(s), like standard tee
@@ -81,12 +109,23 @@ positional arguments:
 options:
   -a, --append      append to files instead of overwriting
   --paste, -p       print current clipboard contents to stdout
-  --backend NAME    force clipboard backend (windows, macos, xclip, xsel, wayland, wsl)
+  --backend NAME    force clipboard backend
   --no-clipboard, -nc
                     skip clipboard (act as plain tee)
   -q, --quiet       suppress warning messages
+  --list, -l        show recent clipboard history
+  --list-count N    number of entries to show with --list (default: 10)
+  --get N, -g N     retrieve Nth clip from history (1 = most recent)
+  --clear           clear all clipboard history
+  --save, -s        save current clipboard contents to history
+  --config          show current configuration
+  --no-history      skip history save for this invocation
+  --encrypt         enable AES-256-GCM encryption (requires teeclip[secure])
+  --decrypt         decrypt all stored clips
   -V, --version     show version and exit
 ```
+
+For detailed documentation on all options and the config file, see [docs/configuration.md](docs/configuration.md).
 
 ## Contributions
 

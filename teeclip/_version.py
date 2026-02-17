@@ -20,14 +20,14 @@ Version levels:
 
 # Version components - edit these for version bumps
 MAJOR = 0
-MINOR = 1
-PATCH = 1
-PHASE = None  # Per-MINOR feature set: None, "alpha", "beta", "rc1", etc.
-PRE_RELEASE_NUM = 0  # PEP 440 pre-release number (e.g., a1, b2)
+MINOR = 2
+PATCH = 0
+PHASE = "alpha"  # Per-MINOR feature set: None, "alpha", "beta", "rc1", etc.
+PRE_RELEASE_NUM = 1  # PEP 440 pre-release number (e.g., a1, b2)
 PROJECT_PHASE = "prealpha"  # Project-wide: "prealpha", "alpha", "beta", "stable"
 
 # Auto-updated by git hooks - do not edit manually
-__version__ = "0.1.1_main_5-20260216-65ff0e39"
+__version__ = "0.2.0-alpha_main_6-20260216-692565ce"
 __app_name__ = "teeclip"
 
 

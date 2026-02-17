@@ -1,0 +1,64 @@
+# Changelog
+
+All notable changes to teeclip will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.2.0-alpha] - 2026-02-16
+
+### Added
+
+- **Clipboard history**: Piped content is automatically saved to a SQLite database (`~/.teeclip/history.db`)
+- **`--list`, `-l`**: Show recent clipboard history with timestamps and previews
+- **`--list-count N`**: Limit the number of entries shown by `--list`
+- **`--get N`, `-g N`**: Retrieve the Nth most recent clip (1 = newest) to stdout and clipboard
+- **`--clear`**: Clear all clipboard history (prompts for confirmation in interactive mode)
+- **`--save`, `-s`**: Save current clipboard contents into history
+- **`--config`**: Display effective configuration and config file path
+- **`--no-history`**: Skip history save for the current invocation
+- **`--encrypt`**: Enable AES-256-GCM encryption on all stored clips (requires `pip install teeclip[secure]`)
+- **`--decrypt`**: Decrypt all encrypted clips and disable encryption
+- **Configuration file**: `~/.teeclip/config.toml` for persistent settings (history size, encryption, backend, quiet mode)
+- **TOML fallback parser**: Built-in minimal TOML parser for Python 3.8-3.10 (Python 3.11+ uses stdlib `tomllib`)
+- **`TEECLIP_HOME` env var**: Override `~/.teeclip/` data directory (useful for testing and custom setups)
+- **`[secure]` optional dependency**: `pip install teeclip[secure]` adds `cryptography>=41.0` for AES-256-GCM encryption
+- **Deduplication**: Consecutive identical clips are not duplicated in history
+- **FIFO eviction**: History auto-trims to `max_entries` (default 50) oldest-first
+
+### Changed
+
+- Default tee mode now saves piped content to history (disable with `--no-history` or `history.auto_save = false` in config)
+- CLI dispatch is now priority-based: config → encrypt/decrypt → clear → list → get → save → paste → tee
+
+## [0.1.1] - 2026-02-16
+
+### Added
+
+- PyPI trusted publisher workflow (`release.yml`) for automated releases via OIDC
+- VS Code debug configurations for teeclip and pytest
+- Platform support documentation (`docs/platform-support.md`)
+- `tests/output/` directory for debug output
+
+### Changed
+
+- README badges updated to DazzleTools convention
+- `-nc` shorthand documented in options block
+
+## [0.1.0] - 2026-02-16
+
+### Added
+
+- Initial release
+- Tee-style stdin pass-through with clipboard copy
+- Cross-platform clipboard support: Windows, macOS, Linux (X11/Wayland), WSL
+- `--paste` / `-p` to read clipboard contents to stdout
+- `--backend` to force a specific clipboard backend
+- `--no-clipboard` / `-nc` to skip clipboard (plain tee mode)
+- `-a` / `--append` for file append mode
+- `-q` / `--quiet` to suppress warnings
+- File output support (like standard `tee`)
+
+[0.2.0-alpha]: https://github.com/DazzleTools/teeclip/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/DazzleTools/teeclip/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/DazzleTools/teeclip/releases/tag/v0.1.0

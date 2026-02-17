@@ -17,6 +17,8 @@ def tee_to_clipboard(
     backend_name=None,
     quiet=False,
     no_clipboard=False,
+    save_history=False,
+    config=None,
 ):
     """
     Read stdin, write to stdout and clipboard.
@@ -27,6 +29,8 @@ def tee_to_clipboard(
         backend_name: Force a specific clipboard backend.
         quiet: Suppress warning messages.
         no_clipboard: Skip clipboard (useful for testing file-only tee).
+        save_history: If True, save content to clipboard history.
+        config: Config object for history settings.
     """
     # Open output files if specified
     file_handles = []
@@ -84,3 +88,14 @@ def tee_to_clipboard(
         except ClipboardError as e:
             if not quiet:
                 print(f"teeclip: clipboard: {e}", file=sys.stderr)
+
+        # Save to clipboard history (failure never breaks the pipe)
+        if save_history and data:
+            try:
+                from .history import HistoryStore
+                store = HistoryStore(config=config)
+                store.save(data, source="pipe")
+                store.close()
+            except Exception as e:
+                if not quiet:
+                    print(f"teeclip: history: {e}", file=sys.stderr)

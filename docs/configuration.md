@@ -112,7 +112,7 @@ Reads stdin, writes to stdout, copies to clipboard, and saves to history.
 | `--list` | `-l` | Show recent clipboard history |
 | `--list-count N` | | Limit entries shown (default: 10) |
 | `--get N` | `-g N` | Retrieve Nth most recent clip (1 = newest). Outputs to stdout and copies to clipboard |
-| `--clear` | | Delete all clipboard history. Prompts for confirmation when interactive |
+| `--clear [SELECTOR]` | | Delete history entries. No argument clears all (prompts for confirmation). Accepts indices (`3`), ranges (`4:10`), or combos (`2,4:10`) |
 
 ### Configuration
 

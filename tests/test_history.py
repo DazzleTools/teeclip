@@ -356,3 +356,103 @@ def test_content_type_preserved(history_store):
     history_store.save(b"binary data", content_type="application/octet-stream")
     entry = history_store.list_recent(limit=1)[0]
     assert entry.content_type == "application/octet-stream"
+
+
+# ── delete_by_indices ────────────────────────────────────────────────
+
+
+def test_delete_by_indices_single(history_store):
+    """delete_by_indices removes a single entry by display index."""
+    for i in range(1, 4):
+        history_store.save(f"clip {i}".encode(), source="test")
+
+    # Delete #2 in display order (clip 2, the middle one)
+    count = history_store.delete_by_indices([2])
+    assert count == 1
+    assert history_store.count() == 2
+
+    # clip 3 is #1 (newest), clip 1 is #2 (oldest) — clip 2 gone
+    assert history_store.get_clip(1) == b"clip 3"
+    assert history_store.get_clip(2) == b"clip 1"
+
+
+def test_delete_by_indices_multiple(history_store):
+    """delete_by_indices removes multiple entries."""
+    for i in range(1, 6):
+        history_store.save(f"clip {i}".encode(), source="test")
+
+    # Delete #1 (clip 5) and #4 (clip 2)
+    count = history_store.delete_by_indices([1, 4])
+    assert count == 2
+    assert history_store.count() == 3
+
+    # Remaining: clip 4 (#1), clip 3 (#2), clip 1 (#3)
+    assert history_store.get_clip(1) == b"clip 4"
+    assert history_store.get_clip(2) == b"clip 3"
+    assert history_store.get_clip(3) == b"clip 1"
+
+
+def test_delete_by_indices_out_of_range(history_store):
+    """Out-of-range indices are silently ignored."""
+    history_store.save(b"only clip", source="test")
+
+    count = history_store.delete_by_indices([5, 10])
+    assert count == 0
+    assert history_store.count() == 1
+
+
+def test_delete_by_indices_empty_list(history_store):
+    """Empty index list deletes nothing."""
+    history_store.save(b"still here", source="test")
+
+    count = history_store.delete_by_indices([])
+    assert count == 0
+    assert history_store.count() == 1
+
+
+# ── parse_clear_selector ────────────────────────────────────────────
+
+
+def test_parse_single_index():
+    """Single number parses to one-element list."""
+    from teeclip.cli import parse_clear_selector
+    assert parse_clear_selector("3") == [3]
+
+
+def test_parse_range():
+    """START:END parses to inclusive range."""
+    from teeclip.cli import parse_clear_selector
+    assert parse_clear_selector("4:7") == [4, 5, 6, 7]
+
+
+def test_parse_combo():
+    """Comma-separated indices and ranges parse correctly."""
+    from teeclip.cli import parse_clear_selector
+    assert parse_clear_selector("1,5:7,10") == [1, 5, 6, 7, 10]
+
+
+def test_parse_deduplicates():
+    """Overlapping ranges produce unique sorted indices."""
+    from teeclip.cli import parse_clear_selector
+    assert parse_clear_selector("3:5,4:6") == [3, 4, 5, 6]
+
+
+def test_parse_invalid_text():
+    """Non-numeric input raises ValueError."""
+    from teeclip.cli import parse_clear_selector
+    with pytest.raises(ValueError, match="invalid index"):
+        parse_clear_selector("abc")
+
+
+def test_parse_invalid_range():
+    """Reversed range raises ValueError."""
+    from teeclip.cli import parse_clear_selector
+    with pytest.raises(ValueError, match="start > end"):
+        parse_clear_selector("10:5")
+
+
+def test_parse_zero_index():
+    """Zero index raises ValueError."""
+    from teeclip.cli import parse_clear_selector
+    with pytest.raises(ValueError, match="positive"):
+        parse_clear_selector("0")

@@ -24,6 +24,7 @@ import hashlib
 import os
 import platform
 import shutil
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -617,6 +618,9 @@ def encrypt_history(store, password: Optional[str] = None,
         salt = get_or_create_salt(store)
         key = derive_key(password, salt)
 
+    import hmac as hmac_mod
+    from .history import _mask_size
+
     conn = store._ensure_conn()
     rows = conn.execute(
         "SELECT id, content FROM clips WHERE encrypted = 0"
@@ -624,11 +628,14 @@ def encrypt_history(store, password: Optional[str] = None,
 
     count = 0
     for row in rows:
-        encrypted_content = encrypt(bytes(row["content"]), key)
+        plaintext = bytes(row["content"])
+        encrypted_content = encrypt(plaintext, key)
+        keyed_hash = hmac_mod.new(key, plaintext, 'sha256').hexdigest()
+        masked_size = _mask_size(len(plaintext), key, keyed_hash)
         conn.execute(
             "UPDATE clips SET content = ?, encrypted = 1, "
-            "preview = '(encrypted)' WHERE id = ?",
-            (encrypted_content, row["id"])
+            "preview = '(encrypted)', hash = ?, size = ? WHERE id = ?",
+            (encrypted_content, keyed_hash, masked_size, row["id"])
         )
         count += 1
 
@@ -638,6 +645,10 @@ def encrypt_history(store, password: Optional[str] = None,
             ("encryption_enabled", "true")
         )
         conn.commit()
+        try:
+            conn.execute("VACUUM")
+        except sqlite3.OperationalError:
+            pass  # best-effort; concurrent access may block VACUUM
 
     return count
 
@@ -671,10 +682,12 @@ def decrypt_history(store, password: Optional[str] = None,
     for row in rows:
         decrypted_content = decrypt(bytes(row["content"]), key)
         preview = _make_preview(decrypted_content)
+        restored_hash = hashlib.sha256(decrypted_content).hexdigest()
         conn.execute(
-            "UPDATE clips SET content = ?, encrypted = 0, preview = ? "
-            "WHERE id = ?",
-            (decrypted_content, preview, row["id"])
+            "UPDATE clips SET content = ?, encrypted = 0, preview = ?, "
+            "hash = ?, size = ? WHERE id = ?",
+            (decrypted_content, preview, restored_hash,
+             len(decrypted_content), row["id"])
         )
         count += 1
 
@@ -689,6 +702,10 @@ def decrypt_history(store, password: Optional[str] = None,
                 ("encryption_enabled", "false")
             )
         conn.commit()
+        try:
+            conn.execute("VACUUM")
+        except sqlite3.OperationalError:
+            pass  # best-effort
 
     return count
 

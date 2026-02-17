@@ -35,6 +35,9 @@ def build_parser() -> argparse.ArgumentParser:
             "  teeclip --paste | grep error      # pipe clipboard into grep\n"
             "  teeclip --list                    # show clipboard history\n"
             "  teeclip --get 1                   # retrieve most recent clip\n"
+            "  teeclip --clear 3                 # delete entry #3\n"
+            "  teeclip --clear 4:10              # delete entries 4-10\n"
+            "  teeclip --clear 2,4:10            # delete entry 2 and 4-10\n"
         ),
     )
 
@@ -101,9 +104,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     p.add_argument(
         "--clear",
-        action="store_true",
+        nargs="?",
+        const="all",
+        default=None,
+        metavar="SELECTOR",
         dest="clear_history",
-        help="clear all clipboard history",
+        help=(
+            "delete history entries. No argument clears all. "
+            "Accepts indices (3), ranges (4:10), or combinations (2,4:10)"
+        ),
     )
 
     p.add_argument(
@@ -176,9 +185,9 @@ def main(argv=None):
         _cmd_decrypt(config)
         return
 
-    # --clear: clear history
-    if args.clear_history:
-        _cmd_clear(config)
+    # --clear: clear history (all or selective)
+    if args.clear_history is not None:
+        _cmd_clear(config, args.clear_history)
         return
 
     # --list: show recent history
@@ -336,25 +345,96 @@ def _cmd_save(config, backend_name=None):
             print("teeclip: already in history (duplicate)")
 
 
-def _cmd_clear(config):
-    """Clear all clipboard history."""
-    # Prompt for confirmation if running interactively
-    if sys.stdin.isatty():
-        try:
-            answer = input("Clear all clipboard history? [y/N] ")
-        except (EOFError, KeyboardInterrupt):
-            print()
-            return
-        if answer.lower() not in ("y", "yes"):
-            return
+def _cmd_clear(config, selector):
+    """Clear clipboard history — all or selective.
 
+    selector is "all" (no arg) or a string like "3", "4:10", "2,4:10".
+    """
     from .history import HistoryStore
 
+    if selector == "all":
+        # Clear everything — prompt for confirmation if interactive
+        if sys.stdin.isatty():
+            try:
+                answer = input("Clear all clipboard history? [y/N] ")
+            except (EOFError, KeyboardInterrupt):
+                print()
+                return
+            if answer.lower() not in ("y", "yes"):
+                return
+
+        with HistoryStore(config=config) as store:
+            count = store.clear()
+
+        if not config.output_quiet:
+            print(f"teeclip: cleared {count} entries")
+        return
+
+    # Selective deletion
+    try:
+        indices = parse_clear_selector(selector)
+    except ValueError as e:
+        print(f"teeclip: {e}", file=sys.stderr)
+        sys.exit(1)
+
     with HistoryStore(config=config) as store:
-        count = store.clear()
+        count = store.delete_by_indices(indices)
 
     if not config.output_quiet:
-        print(f"teeclip: cleared {count} entries")
+        print(f"teeclip: deleted {count} entries")
+
+
+def parse_clear_selector(selector: str) -> list:
+    """Parse a clear selector string into a sorted list of 1-based indices.
+
+    Supports:
+        "3"       → [3]
+        "4:10"    → [4, 5, 6, 7, 8, 9, 10]
+        "2,4:10"  → [2, 4, 5, 6, 7, 8, 9, 10]
+        "1,3,5"   → [1, 3, 5]
+
+    Raises ValueError on invalid syntax.
+    """
+    indices = set()
+    for part in selector.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if ":" in part:
+            pieces = part.split(":", 1)
+            try:
+                start = int(pieces[0])
+                end = int(pieces[1])
+            except ValueError:
+                raise ValueError(
+                    f"invalid range: '{part}' (expected START:END)"
+                )
+            if start < 1 or end < 1:
+                raise ValueError(
+                    f"indices must be positive: '{part}'"
+                )
+            if start > end:
+                raise ValueError(
+                    f"invalid range: '{part}' (start > end)"
+                )
+            indices.update(range(start, end + 1))
+        else:
+            try:
+                idx = int(part)
+            except ValueError:
+                raise ValueError(
+                    f"invalid index: '{part}' (expected a number)"
+                )
+            if idx < 1:
+                raise ValueError(
+                    f"indices must be positive: '{part}'"
+                )
+            indices.add(idx)
+
+    if not indices:
+        raise ValueError("empty selector")
+
+    return sorted(indices)
 
 
 def _cmd_encrypt(config):

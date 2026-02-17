@@ -99,9 +99,9 @@ teeclip --encrypt
 
 ```
 usage: teeclip [-h] [-a] [--paste] [--backend NAME] [--no-clipboard] [-q]
-               [--list] [--list-count N] [--get N] [--clear] [--save]
-               [--config] [--no-history] [--encrypt] [--decrypt] [-V]
-               [FILE ...]
+               [--list] [--list-count N] [--get N] [--clear [SELECTOR]]
+               [--save] [--config] [--no-history] [--encrypt] [--decrypt]
+               [-V] [FILE ...]
 
 positional arguments:
   FILE              also write to FILE(s), like standard tee
@@ -116,7 +116,8 @@ options:
   --list, -l        show recent clipboard history
   --list-count N    number of entries to show with --list (default: 10)
   --get N, -g N     retrieve Nth clip from history (1 = most recent)
-  --clear           clear all clipboard history
+  --clear [SELECTOR]
+                    delete history entries (all, or by index/range/combo)
   --save, -s        save current clipboard contents to history
   --config          show current configuration
   --no-history      skip history save for this invocation

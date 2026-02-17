@@ -5,7 +5,7 @@ All notable changes to teeclip will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.1-alpha] - 2026-02-16
+## [0.2.2-alpha] - 2026-02-17
 
 ### Added
 
@@ -13,10 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Auto-encrypt on save**: When `encryption = "aes256"` and `auth_method = "os"`, new clips are encrypted transparently during pipe operations
 - **Key provider abstraction**: `KeyProvider` base class with five implementations — `DPAPIKeyProvider`, `KeychainKeyProvider`, `SecretToolKeyProvider`, `FileKeyProvider`, `PasswordKeyProvider`
 - **`security.auth_method` config setting**: Choose between `"os"` (default, zero-prompt) and `"password"` (existing behavior)
+- **Selective `--clear`**: `--clear 3` (single entry), `--clear 4:10` (range), `--clear 2,4:10` (combo). No argument still clears all with confirmation prompt.
+- **Developer scripts**: `gh_issue_full.py` (full issue context viewer with timeline, cross-refs, sub-issues), `gh_sub_issues.py` (link/unlink GitHub sub-issues via GraphQL), `safe_move.sh` (hash-verified file move with Windows timestamp preservation)
 
 ### Fixed
 
 - `--no-clipboard` now correctly saves to history (was skipping history save because it was nested inside the clipboard-copy conditional)
+
+### Security
+
+- **HMAC-keyed hashing**: Encrypted clips use HMAC-SHA-256 (keyed with the encryption key) instead of bare SHA-256 — prevents offline plaintext fingerprinting by attackers with database access
+- **Size masking**: Encrypted clips mask the size with a per-clip key-derived value — looks random without the key, recoverable with it
+- **SQLite VACUUM**: Runs after encrypt, decrypt, and clear operations to scrub residual plaintext from free database pages
 
 ### Changed
 
@@ -79,7 +87,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `-q` / `--quiet` to suppress warnings
 - File output support (like standard `tee`)
 
-[0.2.1-alpha]: https://github.com/DazzleTools/teeclip/compare/v0.2.0a1...HEAD
+[0.2.2-alpha]: https://github.com/DazzleTools/teeclip/compare/v0.2.1a1...HEAD
+[0.2.1-alpha]: https://github.com/DazzleTools/teeclip/compare/v0.2.0a1...v0.2.1a1
 [0.2.0-alpha]: https://github.com/DazzleTools/teeclip/compare/v0.1.1...v0.2.0a1
 [0.1.1]: https://github.com/DazzleTools/teeclip/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/DazzleTools/teeclip/releases/tag/v0.1.0

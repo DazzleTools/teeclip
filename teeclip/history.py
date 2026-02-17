@@ -6,6 +6,7 @@ deduplication, and optional encryption support.
 """
 
 import hashlib
+import hmac as hmac_mod
 import sqlite3
 import sys
 from datetime import datetime, timezone
@@ -137,18 +138,11 @@ class HistoryStore:
         """
         conn = self._ensure_conn()
 
-        # Hash and preview are always from plaintext
+        # Start with bare SHA-256 hash (used when not encrypting)
         content_hash = hashlib.sha256(content).hexdigest()
-
-        # Dedup: skip if hash matches most recent entry
-        last = conn.execute(
-            "SELECT hash FROM clips ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-        if last and last["hash"] == content_hash:
-            return None
-
         preview = _make_preview(content, self._config.history_preview_length)
         timestamp = datetime.now(timezone.utc).isoformat()
+        stored_size = len(content)
 
         # Auto-encrypt if configured with OS auth (no prompt needed)
         save_content = content
@@ -165,15 +159,32 @@ class HistoryStore:
                     save_content = aes_encrypt(content, key)
                     encrypted = 1
                     preview = "(encrypted)"
+                    # HMAC hash with encryption key — prevents offline
+                    # plaintext verification by attackers with db access
+                    content_hash = hmac_mod.new(
+                        key, content, 'sha256'
+                    ).hexdigest()
+                    # XOR-mask the size so it looks random without
+                    # the key but is recoverable with it
+                    stored_size = _mask_size(
+                        len(content), key, content_hash
+                    )
             except Exception as e:
                 _warn(f"auto-encrypt failed, saving plaintext: {e}")
+
+        # Dedup: skip if hash matches most recent entry
+        last = conn.execute(
+            "SELECT hash FROM clips ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        if last and last["hash"] == content_hash:
+            return None
 
         cursor = conn.execute(
             """INSERT INTO clips
                (timestamp, content_type, content, size, hash, preview,
                 source, encrypted)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (timestamp, content_type, save_content, len(content),
+            (timestamp, content_type, save_content, stored_size,
              content_hash, preview, source, encrypted)
         )
         clip_id = cursor.lastrowid
@@ -241,7 +252,55 @@ class HistoryStore:
         count = cursor.fetchone()["cnt"]
         conn.execute("DELETE FROM clips")
         conn.commit()
+        if count > 0:
+            try:
+                conn.execute("VACUUM")
+            except sqlite3.OperationalError:
+                pass  # best-effort; scrubs residual data from free pages
         return count
+
+    def delete_by_indices(self, indices: list) -> int:
+        """Delete clips by 1-based display indices (1 = most recent).
+
+        Maps display indices to database IDs using ORDER BY id DESC,
+        matching the ordering used by --list and --get.
+
+        Returns the number of clips actually deleted.
+        """
+        if not indices:
+            return 0
+
+        conn = self._ensure_conn()
+
+        # Get all clip IDs in display order (newest first)
+        rows = conn.execute(
+            "SELECT id FROM clips ORDER BY id DESC"
+        ).fetchall()
+
+        total = len(rows)
+        # Map 1-based indices to database IDs
+        ids_to_delete = []
+        for idx in indices:
+            if 1 <= idx <= total:
+                ids_to_delete.append(rows[idx - 1]["id"])
+
+        if not ids_to_delete:
+            return 0
+
+        placeholders = ",".join("?" * len(ids_to_delete))
+        conn.execute(
+            f"DELETE FROM clips WHERE id IN ({placeholders})",
+            ids_to_delete,
+        )
+        conn.commit()
+
+        if ids_to_delete:
+            try:
+                conn.execute("VACUUM")
+            except sqlite3.OperationalError:
+                pass  # best-effort
+
+        return len(ids_to_delete)
 
     def count(self) -> int:
         """Return the total number of clips in history."""
@@ -289,6 +348,25 @@ def _make_preview(data: bytes, max_len: int = 80) -> str:
     if len(preview) > max_len:
         preview = preview[:max_len - 3] + "..."
     return preview
+
+
+def _mask_size(real_size: int, key: bytes, content_hash: str) -> int:
+    """XOR-mask a size value using a per-clip key-derived mask.
+
+    Without the key the stored integer looks arbitrary; with the key,
+    XOR again to recover the real size.  Each clip gets a unique mask
+    derived from its HMAC hash, so relative sizes are not preserved.
+    """
+    mask = int.from_bytes(
+        hmac_mod.new(key, content_hash.encode(), 'sha256').digest()[:4],
+        'big',
+    )
+    return real_size ^ mask
+
+
+def _unmask_size(stored_size: int, key: bytes, content_hash: str) -> int:
+    """Recover the real size from a masked value (XOR is its own inverse)."""
+    return _mask_size(stored_size, key, content_hash)
 
 
 def _warn(msg: str) -> None:

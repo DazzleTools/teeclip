@@ -225,7 +225,9 @@ def test_encrypt_history_idempotent(populated_history):
 
 
 def test_decrypt_history(populated_history):
-    """decrypt_history restores all encrypted clips."""
+    """decrypt_history restores all encrypted clips and metadata."""
+    import hashlib
+
     encrypt_history(populated_history, "test-password")
     count = decrypt_history(populated_history, "test-password")
     assert count == 5
@@ -237,6 +239,13 @@ def test_decrypt_history(populated_history):
     # Verify previews restored from decrypted content
     assert entries[0].preview == "clip 5"
     assert entries[-1].preview == "clip 1"
+
+    # Verify size restored
+    assert entries[0].size == len(b"clip 5")
+
+    # Verify hash restored to bare SHA-256
+    expected_hash = hashlib.sha256(b"clip 5").hexdigest()
+    assert entries[0].hash == expected_hash
 
     # Verify content
     content = populated_history.get_clip(1)
@@ -250,12 +259,111 @@ def test_decrypt_wrong_password(populated_history):
         decrypt_history(populated_history, "wrong-password")
 
 
-def test_encrypt_blanks_preview(populated_history):
-    """Encryption blanks the preview to avoid leaking plaintext."""
+def test_encrypt_hardens_metadata(populated_history):
+    """Encryption blanks preview, HMACs hash, and masks size."""
+    import hashlib
+    from teeclip.history import _unmask_size
+
+    # Record bare hashes and real sizes before encryption
+    entries_before = populated_history.list_recent()
+    bare_hashes = {e.hash for e in entries_before}
+    real_sizes = {e.hash: e.size for e in entries_before}
+
+    # Get the encryption key for unmask verification
+    salt = get_or_create_salt(populated_history)
+    key = derive_key("test-password", salt)
+
     encrypt_history(populated_history, "test-password")
     entries = populated_history.list_recent()
     for entry in entries:
         assert entry.preview == "(encrypted)"
+        # Size should be XOR-masked — not zero, not the real size
+        assert entry.size != 0
+        # Hash should be HMAC, not the original bare SHA-256
+        assert entry.hash not in bare_hashes
+        # Unmasked size should recover the real content length
+        unmasked = _unmask_size(entry.size, key, entry.hash)
+        assert unmasked == len(b"clip 1")  # all clips are ~6 bytes
+
+
+def test_field_roundtrip_plaintext_encrypt_decrypt(populated_history):
+    """Every metadata field survives the full plaintext → encrypt → decrypt cycle.
+
+    Verifies per-field behavior at each phase:
+      - content: plaintext → AES-256-GCM blob → plaintext restored
+      - hash:    SHA-256   → HMAC-SHA-256     → SHA-256 restored
+      - size:    real len  → XOR-masked       → real len restored
+      - preview: text      → "(encrypted)"    → text restored
+      - encrypted: 0       → 1                → 0
+    """
+    import hashlib
+    from teeclip.history import _unmask_size
+
+    # ── Phase 1: Plaintext baseline ──
+    entries_plain = populated_history.list_recent()
+    plain_fields = {}
+    for entry in entries_plain:
+        content = populated_history.get_clip(
+            entries_plain.index(entry) + 1
+        )
+        plain_fields[entry.id] = {
+            "content": content,
+            "hash": entry.hash,
+            "size": entry.size,
+            "preview": entry.preview,
+            "encrypted": entry.encrypted,
+        }
+        # Sanity: plaintext state
+        assert entry.encrypted is False
+        assert entry.size == len(content)
+        assert entry.hash == hashlib.sha256(content).hexdigest()
+        assert entry.preview != "(encrypted)"
+
+    # ── Phase 2: Encrypted ──
+    salt = get_or_create_salt(populated_history)
+    key = derive_key("test-password", salt)
+
+    encrypt_history(populated_history, "test-password")
+    entries_enc = populated_history.list_recent()
+
+    for entry in entries_enc:
+        pf = plain_fields[entry.id]
+
+        # content: should be AES blob, not plaintext
+        raw = populated_history.get_clip(
+            [e.id for e in entries_enc].index(entry.id) + 1
+        )
+        assert raw != pf["content"]
+        assert len(raw) > len(pf["content"])  # nonce + tag overhead
+
+        # hash: HMAC, differs from bare SHA-256
+        assert entry.hash != pf["hash"]
+
+        # size: XOR-masked, differs from real size
+        assert entry.size != pf["size"]
+        # Unmask recovers real size
+        assert _unmask_size(entry.size, key, entry.hash) == pf["size"]
+
+        # preview: blanked
+        assert entry.preview == "(encrypted)"
+
+        # encrypted flag: set
+        assert entry.encrypted is True
+
+    # ── Phase 3: Decrypted — all fields restored to original ──
+    decrypt_history(populated_history, "test-password")
+    entries_dec = populated_history.list_recent()
+
+    for entry in entries_dec:
+        pf = plain_fields[entry.id]
+        idx = [e.id for e in entries_dec].index(entry.id) + 1
+
+        content = populated_history.get_clip(idx)
+        assert content == pf["content"]
+        assert entry.hash == pf["hash"]
+        assert entry.size == pf["size"]
+        assert entry.preview == pf["preview"]
+        assert entry.encrypted is False
 
 
 # ── Key Provider: FileKeyProvider ────────────────────────────────────
@@ -441,6 +549,10 @@ def test_auto_encrypt_on_save(teeclip_home):
     assert entry.encrypted is True
     # Preview should be blanked to avoid leaking plaintext
     assert entry.preview == "(encrypted)"
+    # Size should be XOR-masked — not the real length, not zero
+    real_size = len(b"auto-encrypted content")
+    assert entry.size != real_size
+    assert entry.size != 0
 
     # Raw content should NOT be the plaintext
     raw = store.get_clip(1)
@@ -490,8 +602,9 @@ def test_no_auto_encrypt_with_password_mode(teeclip_home):
     store.close()
 
 
-def test_auto_encrypt_dedup_uses_plaintext_hash(teeclip_home):
-    """Dedup compares plaintext hashes even when auto-encrypting."""
+def test_auto_encrypt_dedup_uses_hmac_hash(teeclip_home):
+    """Dedup works with HMAC hashes when auto-encrypting."""
+    import hashlib
     from teeclip.history import HistoryStore
 
     config = Config(
@@ -504,6 +617,11 @@ def test_auto_encrypt_dedup_uses_plaintext_hash(teeclip_home):
 
     assert clip_id1 is not None
     assert clip_id2 is None  # dedup should catch it
+
+    # Verify hash is HMAC, not bare SHA-256
+    entry = store.list_recent(1)[0]
+    bare_sha256 = hashlib.sha256(b"duplicate content").hexdigest()
+    assert entry.hash != bare_sha256  # HMAC differs from bare hash
 
     store.close()
     get_key_provider(config).delete_key()

@@ -4,7 +4,6 @@
 *       @djdarcy
 
 # Core implementation
-*.js    @djdarcy
 *.py    @djdarcy
 
 # Documentation

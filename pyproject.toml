@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "teeclip"
+dynamic = ["version"]
+description = "Cross-platform tee-to-clipboard CLI with history management"
+readme = "README.md"
+license = {text = "GPL-3.0-or-later"}
+requires-python = ">=3.8"
+authors = [
+    {name = "djdarcy", email = "6962246+djdarcy@users.noreply.github.com"},
+]
+keywords = ["tee", "clipboard", "cli", "pipe", "copy", "paste", "clipboard-history", "cross-platform"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Utilities",
+    "Topic :: System :: Shells",
+]
+
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/DazzleTools/teeclip"
+Repository = "https://github.com/DazzleTools/teeclip"
+Issues = "https://github.com/DazzleTools/teeclip/issues"
+
+[project.scripts]
+teeclip = "teeclip.cli:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "teeclip._version.PIP_VERSION"}
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["teeclip", "teeclip.*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_functions = "test_*"
+python_classes = "Test*"

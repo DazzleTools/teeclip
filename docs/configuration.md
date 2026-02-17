@@ -31,6 +31,7 @@ quiet = false           # Suppress warning messages
 
 [security]
 encryption = "none"     # "none" or "aes256" (requires teeclip[secure])
+auth_method = "os"      # "os" (default, zero-prompt) or "password"
 ```
 
 ### Section Reference
@@ -63,6 +64,12 @@ Available backends: `windows`, `macos`, `xclip`, `xsel`, `wayland`, `wsl`
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `encryption` | string | `"none"` | Encryption mode. `"none"` or `"aes256"` |
+| `auth_method` | string | `"os"` | Key management method. `"os"` or `"password"` |
+
+**Auth methods**:
+
+- **`"os"` (default)**: Uses your OS login session to protect the encryption key. No password prompts needed — if you're logged in, you can access your clips. Uses DPAPI on Windows, Keychain on macOS, Secret Service (GNOME Keyring / KDE Wallet) on Linux, with a file-based fallback for headless environments.
+- **`"password"`**: Prompts for a password each time encryption or decryption is needed. Uses PBKDF2-HMAC-SHA256 (600,000 iterations) to derive the key.
 
 To use encryption, install the secure extra:
 
@@ -117,18 +124,33 @@ Reads stdin, writes to stdout, copies to clipboard, and saves to history.
 
 | Flag | Description |
 |------|-------------|
-| `--encrypt` | Encrypt all stored clips with AES-256-GCM. Prompts for a password (with confirmation) |
-| `--decrypt` | Decrypt all encrypted clips. Prompts for password |
+| `--encrypt` | Encrypt all stored clips with AES-256-GCM |
+| `--decrypt` | Decrypt all encrypted clips |
 
 Encryption requires `pip install teeclip[secure]` (adds the `cryptography` package).
 
-**How it works**:
+**How it works** (depends on `auth_method` in config):
 
-- `--encrypt` prompts for a password, derives an AES-256 key via PBKDF2 (600,000 iterations), and encrypts all unencrypted clips in-place
-- `--decrypt` reverses the process, restoring plaintext
-- `--get N` on an encrypted clip prompts for the password to decrypt before output
+With `auth_method = "os"` (default):
+
+- `--encrypt` generates an AES-256 key, protects it with your OS credentials, and encrypts all clips — **no password prompt**
+- `--decrypt` retrieves the OS-protected key and decrypts all clips — **no password prompt**
+- `--get N` on an encrypted clip decrypts transparently
+- New clips are auto-encrypted when `encryption = "aes256"` is in your config
+- The key is tied to your OS user account and machine
+
+With `auth_method = "password"`:
+
+- `--encrypt` prompts for a password, derives an AES-256 key via PBKDF2, and encrypts all clips
+- `--decrypt` prompts for the password and decrypts
+- `--get N` prompts for the password to decrypt
+- New clips are **not** auto-encrypted (can't prompt during pipe operations)
+
+**Common to both modes**:
+
 - `--list` preview text is always readable (stored separately from encrypted content)
-- The encryption salt is stored in the database metadata — one salt per database
+- AES-256-GCM encryption with random 12-byte nonces
+- The encryption salt is stored in the database metadata
 
 ### Info
 
@@ -161,6 +183,8 @@ All data is stored under `~/.teeclip/` (or `$TEECLIP_HOME`):
 |------|-------------|
 | `config.toml` | Configuration (user-created) |
 | `history.db` | SQLite database for clipboard history (auto-created on first save) |
+| `.keyblob` | DPAPI-protected encryption key (Windows, auto-created when encryption enabled) |
+| `.keyfile` | Raw encryption key file with 0600 permissions (Linux fallback, auto-created) |
 
 ### History Database Schema
 

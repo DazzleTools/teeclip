@@ -15,6 +15,7 @@ def test_default_config_when_no_file(teeclip_home):
     assert config.clipboard_backend == ""
     assert config.output_quiet is False
     assert config.security_encryption == "none"
+    assert config.security_auth_method == "os"
 
 
 def test_load_valid_config(config_file):
@@ -53,6 +54,15 @@ def test_security_section(config_file):
     config_file('[security]\nencryption = "aes256"\n')
     config = load_config()
     assert config.security_encryption == "aes256"
+    assert config.security_auth_method == "os"  # default
+
+
+def test_security_auth_method(config_file):
+    """[security] auth_method parsed correctly."""
+    config_file('[security]\nencryption = "aes256"\nauth_method = "password"\n')
+    config = load_config()
+    assert config.security_encryption == "aes256"
+    assert config.security_auth_method == "password"
 
 
 def test_clipboard_backend(config_file):

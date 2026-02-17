@@ -61,9 +61,8 @@ def tee_to_clipboard(
             for fh in file_handles:
                 fh.write(chunk)
 
-            # Buffer for clipboard
-            if not no_clipboard:
-                chunks.append(chunk)
+            # Buffer for clipboard and/or history
+            chunks.append(chunk)
 
     except KeyboardInterrupt:
         # Ctrl+C — still try to copy what we have so far
@@ -80,22 +79,26 @@ def tee_to_clipboard(
             except OSError:
                 pass
 
+    if not chunks:
+        return
+
+    data = b"".join(chunks)
+
     # Copy buffered content to clipboard
-    if not no_clipboard and chunks:
-        data = b"".join(chunks)
+    if not no_clipboard:
         try:
             copy_to_clipboard(data, backend_name=backend_name)
         except ClipboardError as e:
             if not quiet:
                 print(f"teeclip: clipboard: {e}", file=sys.stderr)
 
-        # Save to clipboard history (failure never breaks the pipe)
-        if save_history and data:
-            try:
-                from .history import HistoryStore
-                store = HistoryStore(config=config)
-                store.save(data, source="pipe")
-                store.close()
-            except Exception as e:
-                if not quiet:
-                    print(f"teeclip: history: {e}", file=sys.stderr)
+    # Save to clipboard history (failure never breaks the pipe)
+    if save_history and data:
+        try:
+            from .history import HistoryStore
+            store = HistoryStore(config=config)
+            store.save(data, source="pipe")
+            store.close()
+        except Exception as e:
+            if not quiet:
+                print(f"teeclip: history: {e}", file=sys.stderr)

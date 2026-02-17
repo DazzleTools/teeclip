@@ -129,10 +129,15 @@ class HistoryStore:
              source: str = "pipe") -> Optional[int]:
         """Save content to history.
 
+        When encryption is configured with OS auth, content is encrypted
+        transparently before storage.  Preview and hash are computed from
+        the plaintext so that --list and dedup still work.
+
         Returns the clip ID, or None if skipped (duplicate).
         """
         conn = self._ensure_conn()
 
+        # Hash and preview are always from plaintext
         content_hash = hashlib.sha256(content).hexdigest()
 
         # Dedup: skip if hash matches most recent entry
@@ -145,12 +150,31 @@ class HistoryStore:
         preview = _make_preview(content, self._config.history_preview_length)
         timestamp = datetime.now(timezone.utc).isoformat()
 
+        # Auto-encrypt if configured with OS auth (no prompt needed)
+        save_content = content
+        encrypted = 0
+        if (self._config.security_encryption == "aes256"
+                and self._config.security_auth_method != "password"):
+            try:
+                from .encryption import (
+                    is_available, get_encryption_key,
+                    encrypt as aes_encrypt,
+                )
+                if is_available():
+                    key = get_encryption_key(self._config, self)
+                    save_content = aes_encrypt(content, key)
+                    encrypted = 1
+                    preview = "(encrypted)"
+            except Exception as e:
+                _warn(f"auto-encrypt failed, saving plaintext: {e}")
+
         cursor = conn.execute(
             """INSERT INTO clips
-               (timestamp, content_type, content, size, hash, preview, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (timestamp, content_type, content, len(content),
-             content_hash, preview, source)
+               (timestamp, content_type, content, size, hash, preview,
+                source, encrypted)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (timestamp, content_type, save_content, len(content),
+             content_hash, preview, source, encrypted)
         )
         clip_id = cursor.lastrowid
 
@@ -265,3 +289,8 @@ def _make_preview(data: bytes, max_len: int = 80) -> str:
     if len(preview) > max_len:
         preview = preview[:max_len - 3] + "..."
     return preview
+
+
+def _warn(msg: str) -> None:
+    """Print a warning to stderr."""
+    print(f"teeclip: history: {msg}", file=sys.stderr)

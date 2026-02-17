@@ -30,6 +30,7 @@ _DEFAULTS = {
     },
     "security": {
         "encryption": "none",
+        "auth_method": "os",
     },
 }
 
@@ -45,6 +46,7 @@ class Config:
     clipboard_backend: str = ""
     output_quiet: bool = False
     security_encryption: str = "none"
+    security_auth_method: str = "os"
 
     def with_overrides(self, **kwargs) -> "Config":
         """Return a new Config with specified fields overridden.
@@ -120,6 +122,7 @@ def _build_config(parsed: dict) -> Config:
         clipboard_backend=_get("clipboard", "backend", _DEFAULTS["clipboard"]["backend"]),
         output_quiet=_get("output", "quiet", _DEFAULTS["output"]["quiet"]),
         security_encryption=_get("security", "encryption", _DEFAULTS["security"]["encryption"]),
+        security_auth_method=_get("security", "auth_method", _DEFAULTS["security"]["auth_method"]),
     )
 
 
@@ -144,6 +147,7 @@ def format_config(config: Config, config_path: Optional[Path] = None) -> str:
         "",
         "[security]",
         f"  encryption = {config.security_encryption}",
+        f"  auth_method = {config.security_auth_method}",
     ]
     return "\n".join(lines)
 

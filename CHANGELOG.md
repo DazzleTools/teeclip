@@ -5,6 +5,26 @@ All notable changes to teeclip will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1-alpha] - 2026-02-16
+
+### Added
+
+- **OS session-based encryption**: Default `auth_method = "os"` uses DPAPI (Windows), Keychain (macOS), or Secret Service (Linux) to protect the encryption key — no password prompts needed
+- **Auto-encrypt on save**: When `encryption = "aes256"` and `auth_method = "os"`, new clips are encrypted transparently during pipe operations
+- **Key provider abstraction**: `KeyProvider` base class with five implementations — `DPAPIKeyProvider`, `KeychainKeyProvider`, `SecretToolKeyProvider`, `FileKeyProvider`, `PasswordKeyProvider`
+- **`security.auth_method` config setting**: Choose between `"os"` (default, zero-prompt) and `"password"` (existing behavior)
+
+### Fixed
+
+- `--no-clipboard` now correctly saves to history (was skipping history save because it was nested inside the clipboard-copy conditional)
+
+### Changed
+
+- `--encrypt` / `--decrypt` no longer prompt for password when `auth_method = "os"` — uses OS-managed key instead
+- `--get N` decrypts transparently with OS auth (no password prompt)
+- `--list` decrypts preview text on the fly for OS auth users (preview stored as `(encrypted)` on disk)
+- Existing password-based encryption preserved as opt-in via `auth_method = "password"`
+
 ## [0.2.0-alpha] - 2026-02-16
 
 ### Added
@@ -59,6 +79,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `-q` / `--quiet` to suppress warnings
 - File output support (like standard `tee`)
 
-[0.2.0-alpha]: https://github.com/DazzleTools/teeclip/compare/v0.1.1...HEAD
+[0.2.1-alpha]: https://github.com/DazzleTools/teeclip/compare/v0.2.0a1...HEAD
+[0.2.0-alpha]: https://github.com/DazzleTools/teeclip/compare/v0.1.1...v0.2.0a1
 [0.1.1]: https://github.com/DazzleTools/teeclip/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/DazzleTools/teeclip/releases/tag/v0.1.0

@@ -230,23 +230,49 @@ def _cmd_config(config):
 
 def _cmd_list(config, limit):
     """Show recent clipboard history."""
-    from .history import HistoryStore
+    from .history import HistoryStore, _make_preview
 
     with HistoryStore(config=config) as store:
         entries = store.list_recent(limit=limit)
 
-    if not entries:
-        print("(no history)")
-        return
+        if not entries:
+            print("(no history)")
+            return
 
-    for i, entry in enumerate(entries, 1):
-        # Truncate timestamp to just date + time (drop timezone)
-        ts = entry.timestamp
-        if "T" in ts:
-            ts = ts.split("T")[0] + " " + ts.split("T")[1][:8]
-        preview = entry.preview or "(empty)"
-        encrypted_marker = " [encrypted]" if entry.encrypted else ""
-        print(f"  {i:>3}  {ts}  {preview}{encrypted_marker}")
+        # For OS auth, decrypt previews on the fly so --list is useful
+        decrypt_key = None
+        if (config.security_auth_method != "password"
+                and any(e.encrypted for e in entries)):
+            try:
+                from .encryption import (
+                    is_available, get_encryption_key,
+                    decrypt as aes_decrypt,
+                )
+                if is_available():
+                    decrypt_key = get_encryption_key(config, store)
+            except Exception:
+                pass  # fall back to showing "(encrypted)"
+
+        for i, entry in enumerate(entries, 1):
+            # Truncate timestamp to just date + time (drop timezone)
+            ts = entry.timestamp
+            if "T" in ts:
+                ts = ts.split("T")[0] + " " + ts.split("T")[1][:8]
+
+            preview = entry.preview or "(empty)"
+            if entry.encrypted and decrypt_key is not None:
+                try:
+                    raw = store.get_clip(i)
+                    if raw:
+                        plaintext = aes_decrypt(raw, decrypt_key)
+                        preview = _make_preview(
+                            plaintext, config.history_preview_length
+                        )
+                except Exception:
+                    pass  # keep "(encrypted)" on failure
+
+            encrypted_marker = " [encrypted]" if entry.encrypted else ""
+            print(f"  {i:>3}  {ts}  {preview}{encrypted_marker}")
 
 
 def _cmd_get(config, index, backend_name=None):
@@ -266,7 +292,7 @@ def _cmd_get(config, index, backend_name=None):
         if entry.encrypted:
             from .encryption import decrypt_single, EncryptionError
             try:
-                content = decrypt_single(content, store)
+                content = decrypt_single(content, store, config=config)
             except EncryptionError as e:
                 print(f"teeclip: {e}", file=sys.stderr)
                 sys.exit(1)
@@ -334,7 +360,7 @@ def _cmd_clear(config):
 def _cmd_encrypt(config):
     """Enable encryption for clipboard history."""
     from .encryption import (
-        is_available, require_available, EncryptionError,
+        is_available, EncryptionError,
         prompt_password, encrypt_history,
     )
     from .history import HistoryStore
@@ -347,17 +373,25 @@ def _cmd_encrypt(config):
         )
         sys.exit(1)
 
+    password = None
+    if config.security_auth_method == "password":
+        try:
+            password = prompt_password(confirm=True)
+        except EncryptionError as e:
+            print(f"teeclip: {e}", file=sys.stderr)
+            sys.exit(1)
+
     try:
-        password = prompt_password(confirm=True)
+        with HistoryStore(config=config) as store:
+            count = encrypt_history(store, password=password, config=config)
     except EncryptionError as e:
         print(f"teeclip: {e}", file=sys.stderr)
         sys.exit(1)
 
-    with HistoryStore(config=config) as store:
-        count = encrypt_history(store, password)
-
     if not config.output_quiet:
         print(f"teeclip: encrypted {count} clips")
+        if config.security_auth_method != "password":
+            print("teeclip: using OS session key (no password needed)")
         print("teeclip: new clips will be encrypted automatically")
 
 
@@ -377,15 +411,17 @@ def _cmd_decrypt(config):
         )
         sys.exit(1)
 
-    try:
-        password = prompt_password(confirm=False)
-    except EncryptionError as e:
-        print(f"teeclip: {e}", file=sys.stderr)
-        sys.exit(1)
+    password = None
+    if config.security_auth_method == "password":
+        try:
+            password = prompt_password(confirm=False)
+        except EncryptionError as e:
+            print(f"teeclip: {e}", file=sys.stderr)
+            sys.exit(1)
 
     with HistoryStore(config=config) as store:
         try:
-            count = decrypt_history(store, password)
+            count = decrypt_history(store, password=password, config=config)
         except EncryptionError as e:
             print(f"teeclip: {e}", file=sys.stderr)
             sys.exit(1)

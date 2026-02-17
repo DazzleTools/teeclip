@@ -1,8 +1,11 @@
 # teeclip
 
-[![PyPI version](https://badge.fury.io/py/teeclip.svg)](https://badge.fury.io/py/teeclip)
+[![PyPI](https://img.shields.io/pypi/v/teeclip?color=green)](https://pypi.org/project/teeclip/)
+[![Release Date](https://img.shields.io/github/release-date/DazzleTools/teeclip?color=green)](https://github.com/DazzleTools/teeclip/releases)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+[![License: GPL v3](https://img.shields.io/badge/license-GPL%20v3-green.svg)](https://www.gnu.org/licenses/gpl-3.0.html)
+[![GitHub Discussions](https://img.shields.io/github/discussions/DazzleTools/teeclip)](https://github.com/DazzleTools/teeclip/discussions)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](docs/platform-support.md)
 
 Like Unix `tee`, but for your clipboard. Pipe any command's output to both stdout and the system clipboard simultaneously.
 
@@ -79,7 +82,8 @@ options:
   -a, --append      append to files instead of overwriting
   --paste, -p       print current clipboard contents to stdout
   --backend NAME    force clipboard backend (windows, macos, xclip, xsel, wayland, wsl)
-  --no-clipboard    skip clipboard (act as plain tee)
+  --no-clipboard, -nc
+                    skip clipboard (act as plain tee)
   -q, --quiet       suppress warning messages
   -V, --version     show version and exit
 ```

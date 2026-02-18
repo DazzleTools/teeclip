@@ -16,7 +16,7 @@ from typing import List, Optional, Tuple
 from ._paths import get_history_db_path, ensure_data_dir
 from .config import Config
 
-_CURRENT_SCHEMA_VERSION = 1
+_CURRENT_SCHEMA_VERSION = 2
 
 
 class HistoryError(Exception):
@@ -28,7 +28,7 @@ class HistoryEntry:
     """A single clipboard history entry (metadata only, no content)."""
 
     __slots__ = ("id", "timestamp", "content_type", "size", "hash",
-                 "preview", "source", "encrypted", "sensitive")
+                 "preview", "source", "encrypted", "encrypted_meta")
 
     def __init__(self, row: sqlite3.Row):
         self.id = row["id"]
@@ -39,7 +39,7 @@ class HistoryEntry:
         self.preview = row["preview"]
         self.source = row["source"]
         self.encrypted = bool(row["encrypted"])
-        self.sensitive = bool(row["sensitive"])
+        self.encrypted_meta = row["encrypted_meta"]
 
 
 class HistoryStore:
@@ -81,6 +81,8 @@ class HistoryStore:
 
         if version < 1:
             self._migrate_to_v1()
+        if version < 2:
+            self._migrate_to_v2()
 
     def _get_schema_version(self) -> int:
         """Read current schema version from metadata table."""
@@ -115,14 +117,48 @@ class HistoryStore:
                 ON clips(timestamp DESC);
         """)
 
-        # Set schema version
         conn.execute(
             "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
-            ("schema_version", str(_CURRENT_SCHEMA_VERSION))
+            ("schema_version", "1")
         )
         conn.execute(
             "INSERT OR IGNORE INTO metadata (key, value) VALUES (?, ?)",
             ("created_at", datetime.now(timezone.utc).isoformat())
+        )
+        conn.commit()
+
+    def _migrate_to_v2(self) -> None:
+        """Migrate v1 → v2: add encrypted_meta, remove sensitive."""
+        conn = self._conn
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS clips_v2 (
+                id             INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp      TEXT NOT NULL,
+                content_type   TEXT NOT NULL DEFAULT 'text/plain',
+                content        BLOB NOT NULL,
+                size           INTEGER NOT NULL,
+                hash           TEXT NOT NULL,
+                preview        TEXT NOT NULL DEFAULT '',
+                source         TEXT NOT NULL DEFAULT 'pipe',
+                encrypted      INTEGER NOT NULL DEFAULT 0,
+                encrypted_meta BLOB DEFAULT NULL
+            );
+            INSERT INTO clips_v2 (id, timestamp, content_type, content,
+                                  size, hash, preview, source, encrypted)
+                SELECT id, timestamp, content_type, content,
+                       size, hash, preview, source, encrypted
+                FROM clips;
+            DROP TABLE clips;
+            ALTER TABLE clips_v2 RENAME TO clips;
+            CREATE INDEX IF NOT EXISTS idx_clips_hash
+                ON clips(hash);
+            CREATE INDEX IF NOT EXISTS idx_clips_timestamp
+                ON clips(timestamp DESC);
+        """)
+
+        conn.execute(
+            "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?)",
+            ("schema_version", "2")
         )
         conn.commit()
 
@@ -147,6 +183,7 @@ class HistoryStore:
         # Auto-encrypt if configured with OS auth (no prompt needed)
         save_content = content
         encrypted = 0
+        encrypted_meta = None
         if (self._config.security_encryption == "aes256"
                 and self._config.security_auth_method != "password"):
             try:
@@ -158,7 +195,12 @@ class HistoryStore:
                     key = get_encryption_key(self._config, self)
                     save_content = aes_encrypt(content, key)
                     encrypted = 1
+                    # Encrypt metadata into a separate blob
+                    import json
+                    meta = json.dumps({"content_type": content_type}).encode()
+                    encrypted_meta = aes_encrypt(meta, key)
                     preview = "(encrypted)"
+                    content_type = "(encrypted)"
                     # HMAC hash with encryption key — prevents offline
                     # plaintext verification by attackers with db access
                     content_hash = hmac_mod.new(
@@ -182,10 +224,10 @@ class HistoryStore:
         cursor = conn.execute(
             """INSERT INTO clips
                (timestamp, content_type, content, size, hash, preview,
-                source, encrypted)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                source, encrypted, encrypted_meta)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (timestamp, content_type, save_content, stored_size,
-             content_hash, preview, source, encrypted)
+             content_hash, preview, source, encrypted, encrypted_meta)
         )
         clip_id = cursor.lastrowid
 
@@ -200,7 +242,7 @@ class HistoryStore:
         conn = self._ensure_conn()
         rows = conn.execute(
             """SELECT id, timestamp, content_type, size, hash,
-                      preview, source, encrypted, sensitive
+                      preview, source, encrypted, encrypted_meta
                FROM clips ORDER BY id DESC LIMIT ?""",
             (limit,)
         ).fetchall()
@@ -233,7 +275,7 @@ class HistoryStore:
         conn = self._ensure_conn()
         row = conn.execute(
             """SELECT id, timestamp, content_type, content, size, hash,
-                      preview, source, encrypted, sensitive
+                      preview, source, encrypted, encrypted_meta
                FROM clips ORDER BY id DESC LIMIT 1 OFFSET ?""",
             (index - 1,)
         ).fetchone()

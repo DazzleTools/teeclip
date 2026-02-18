@@ -621,9 +621,11 @@ def encrypt_history(store, password: Optional[str] = None,
     import hmac as hmac_mod
     from .history import _mask_size
 
+    import json
+
     conn = store._ensure_conn()
     rows = conn.execute(
-        "SELECT id, content FROM clips WHERE encrypted = 0"
+        "SELECT id, content, content_type FROM clips WHERE encrypted = 0"
     ).fetchall()
 
     count = 0
@@ -632,10 +634,14 @@ def encrypt_history(store, password: Optional[str] = None,
         encrypted_content = encrypt(plaintext, key)
         keyed_hash = hmac_mod.new(key, plaintext, 'sha256').hexdigest()
         masked_size = _mask_size(len(plaintext), key, keyed_hash)
+        meta = json.dumps({"content_type": row["content_type"]}).encode()
+        encrypted_meta = encrypt(meta, key)
         conn.execute(
             "UPDATE clips SET content = ?, encrypted = 1, "
-            "preview = '(encrypted)', hash = ?, size = ? WHERE id = ?",
-            (encrypted_content, keyed_hash, masked_size, row["id"])
+            "preview = '(encrypted)', content_type = '(encrypted)', "
+            "hash = ?, size = ?, encrypted_meta = ? WHERE id = ?",
+            (encrypted_content, keyed_hash, masked_size, encrypted_meta,
+             row["id"])
         )
         count += 1
 
@@ -671,9 +677,11 @@ def decrypt_history(store, password: Optional[str] = None,
         salt = get_or_create_salt(store)
         key = derive_key(password, salt)
 
+    import json
+
     conn = store._ensure_conn()
     rows = conn.execute(
-        "SELECT id, content FROM clips WHERE encrypted = 1"
+        "SELECT id, content, encrypted_meta FROM clips WHERE encrypted = 1"
     ).fetchall()
 
     from .history import _make_preview
@@ -683,10 +691,19 @@ def decrypt_history(store, password: Optional[str] = None,
         decrypted_content = decrypt(bytes(row["content"]), key)
         preview = _make_preview(decrypted_content)
         restored_hash = hashlib.sha256(decrypted_content).hexdigest()
+        # Recover content_type from encrypted_meta if present
+        content_type = "text/plain"
+        if row["encrypted_meta"]:
+            try:
+                meta = json.loads(decrypt(bytes(row["encrypted_meta"]), key))
+                content_type = meta.get("content_type", "text/plain")
+            except Exception:
+                pass  # fall back to text/plain
         conn.execute(
             "UPDATE clips SET content = ?, encrypted = 0, preview = ?, "
-            "hash = ?, size = ? WHERE id = ?",
-            (decrypted_content, preview, restored_hash,
+            "content_type = ?, hash = ?, size = ?, encrypted_meta = NULL "
+            "WHERE id = ?",
+            (decrypted_content, preview, content_type, restored_hash,
              len(decrypted_content), row["id"])
         )
         count += 1

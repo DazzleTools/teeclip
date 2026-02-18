@@ -7,6 +7,7 @@ Usage:
     my-command | teeclip output.txt   # stdout + clipboard + write to file
     teeclip --paste                   # print current clipboard to stdout
     teeclip --list                    # show recent clipboard history
+    teeclip --list 20                 # show last 20 entries
     teeclip --get 1                   # retrieve most recent clip
     teeclip --version                 # show version
 """
@@ -15,6 +16,21 @@ import argparse
 import sys
 
 from ._version import __version__, get_display_version
+
+
+def _list_arg(value):
+    """Parse --list argument: integer or 'all' (returns -1)."""
+    if value.lower() == "all":
+        return -1
+    try:
+        n = int(value)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"expected a number or 'all', got '{value}'"
+        )
+    if n < 1:
+        raise argparse.ArgumentTypeError(f"count must be >= 1, got {n}")
+    return n
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +50,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  teeclip --paste                   # print clipboard contents\n"
             "  teeclip --paste | grep error      # pipe clipboard into grep\n"
             "  teeclip --list                    # show clipboard history\n"
+            "  teeclip --list 20                 # show last 20 entries\n"
             "  teeclip --get 1                   # retrieve most recent clip\n"
             "  teeclip --clear 3                 # delete entry #3\n"
             "  teeclip --clear 4:10              # delete entries 4-10\n"
@@ -81,17 +98,13 @@ def build_parser() -> argparse.ArgumentParser:
     # History arguments
     p.add_argument(
         "--list", "-l",
-        action="store_true",
+        nargs="?",
+        type=_list_arg,
+        const=0,
+        default=None,
         dest="list_history",
-        help="show recent clipboard history",
-    )
-
-    p.add_argument(
-        "--list-count",
-        type=int,
-        default=10,
         metavar="N",
-        help="number of entries to show with --list (default: 10)",
+        help="show recent clipboard history; N or 'all' (default: config list_count)",
     )
 
     p.add_argument(
@@ -190,9 +203,10 @@ def main(argv=None):
         _cmd_clear(config, args.clear_history)
         return
 
-    # --list: show recent history
-    if args.list_history:
-        _cmd_list(config, args.list_count)
+    # --list [N]: show recent history (0 = use config default)
+    if args.list_history is not None:
+        count = args.list_history or config.history_list_count
+        _cmd_list(config, count)
         return
 
     # --get N: retrieve clip by index
@@ -242,11 +256,13 @@ def _cmd_list(config, limit):
     from .history import HistoryStore, _make_preview
 
     with HistoryStore(config=config) as store:
-        entries = store.list_recent(limit=limit)
+        total = store.count()
 
-        if not entries:
+        if total == 0:
             print("(no history)")
             return
+
+        entries = store.list_recent(limit=limit)
 
         # For OS auth, decrypt previews on the fly so --list is useful
         decrypt_key = None
@@ -280,8 +296,12 @@ def _cmd_list(config, limit):
                 except Exception:
                     pass  # keep "(encrypted)" on failure
 
-            encrypted_marker = " [encrypted]" if entry.encrypted else ""
-            print(f"  {i:>3}  {ts}  {preview}{encrypted_marker}")
+            enc = " [E]" if entry.encrypted else "    "
+            print(f"  {i:>3}  {ts}{enc}  {preview}")
+
+        shown = len(entries)
+        if shown < total:
+            print(f"  ({shown} of {total} entries -- use --list all to see everything)")
 
 
 def _cmd_get(config, index, backend_name=None):

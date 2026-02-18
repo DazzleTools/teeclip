@@ -22,12 +22,12 @@ Version levels:
 MAJOR = 0
 MINOR = 2
 PATCH = 2
-PHASE = "alpha"  # Per-MINOR feature set: None, "alpha", "beta", "rc1", etc.
-PRE_RELEASE_NUM = 1  # PEP 440 pre-release number (e.g., a1, b2)
+PHASE = None  # Per-MINOR feature set: None, "alpha", "beta", "rc1", etc.
+PRE_RELEASE_NUM = 0  # PEP 440 pre-release number (e.g., a1, b2)
 PROJECT_PHASE = "prealpha"  # Project-wide: "prealpha", "alpha", "beta", "stable"
 
 # Auto-updated by git hooks - do not edit manually
-__version__ = "0.2.2-alpha_main_8-20260217-0bf89b50"
+__version__ = "0.2.2_main_9-20260218-8879256f"
 __app_name__ = "teeclip"
 
 

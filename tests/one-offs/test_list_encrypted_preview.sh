@@ -18,7 +18,7 @@ echo "API_KEY=sk-abc123def456" | python -m teeclip --no-clipboard
 echo "just a normal note" | python -m teeclip --no-clipboard
 
 echo ""
-echo "--- List (should show decrypted previews + [encrypted] marker) ---"
+echo "--- List (should show decrypted previews + [E] marker) ---"
 python -m teeclip --list
 
 echo ""

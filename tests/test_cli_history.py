@@ -68,18 +68,44 @@ def test_list_shows_multiple_entries(run_teeclip):
     assert "third clip" in result.stdout
 
 
-def test_list_count_limits_output(run_teeclip):
-    """--list-count limits the number of entries shown."""
+def test_list_with_count(run_teeclip):
+    """--list N limits the number of entries shown."""
     for i in range(5):
         run_teeclip([], input_data=f"clip number {i}")
 
-    result = run_teeclip(["--list", "--list-count", "2"])
+    result = run_teeclip(["--list", "2"])
     assert result.returncode == 0
     # Should show the 2 most recent
     assert "clip number 4" in result.stdout
     assert "clip number 3" in result.stdout
     # Should NOT show older ones
     assert "clip number 0" not in result.stdout
+    # Should show footer with total count
+    assert "2 of 5 entries" in result.stdout
+
+
+def test_list_all(run_teeclip):
+    """--list all shows every entry."""
+    for i in range(15):
+        run_teeclip([], input_data=f"all clip {i}")
+
+    result = run_teeclip(["--list", "all"])
+    assert result.returncode == 0
+    assert "all clip 0" in result.stdout
+    assert "all clip 14" in result.stdout
+    # No footer when showing everything
+    assert "of 15 entries" not in result.stdout
+
+
+def test_list_shows_footer_when_more_exist(run_teeclip):
+    """--list shows count footer when more entries exist than shown."""
+    for i in range(15):
+        run_teeclip([], input_data=f"footer clip {i}")
+
+    # Default is 10, so 15 entries should show footer
+    result = run_teeclip(["--list"])
+    assert result.returncode == 0
+    assert "10 of 15 entries" in result.stdout
 
 
 # ── --get ─────────────────────────────────────────────────────────────

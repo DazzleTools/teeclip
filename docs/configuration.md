@@ -22,6 +22,7 @@ enabled = true          # Save piped content to clipboard history
 max_entries = 50        # Maximum clips to keep (FIFO eviction)
 auto_save = true        # Auto-save during pipe operations
 preview_length = 80     # Characters shown in --list preview
+list_count = 10         # Default number of entries for --list
 
 [clipboard]
 backend = ""            # Auto-detect (or: windows, macos, xclip, xsel, wayland, wsl)
@@ -44,6 +45,7 @@ auth_method = "os"      # "os" (default, zero-prompt) or "password"
 | `max_entries` | int | `50` | Maximum number of clips to retain. Oldest are evicted first |
 | `auto_save` | bool | `true` | Automatically save piped content to history |
 | `preview_length` | int | `80` | Maximum characters for the preview shown in `--list` |
+| `list_count` | int | `10` | Default number of entries shown by `--list` (overridden by `--list N`) |
 
 #### `[clipboard]`
 
@@ -109,8 +111,7 @@ Reads stdin, writes to stdout, copies to clipboard, and saves to history.
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--list` | `-l` | Show recent clipboard history |
-| `--list-count N` | | Limit entries shown (default: 10) |
+| `--list [N]` | `-l [N]` | Show recent clipboard history (default: config `list_count`, initially 10) |
 | `--get N` | `-g N` | Retrieve Nth most recent clip (1 = newest). Outputs to stdout and copies to clipboard |
 | `--clear [SELECTOR]` | | Delete history entries. No argument clears all (prompts for confirmation). Accepts indices (`3`), ranges (`4:10`), or combos (`2,4:10`) |
 
@@ -148,7 +149,8 @@ With `auth_method = "password"`:
 
 **Common to both modes**:
 
-- `--list` preview text is always readable (stored separately from encrypted content)
+- `--list` shows `[E]` marker for encrypted entries. Preview shows `(encrypted)` unless OS auth is active, in which case previews are decrypted on the fly
+- Content-type metadata is preserved inside the `encrypted_meta` blob (recoverable on decrypt)
 - AES-256-GCM encryption with random 12-byte nonces
 - The encryption salt is stored in the database metadata
 
@@ -188,7 +190,7 @@ All data is stored under `~/.teeclip/` (or `$TEECLIP_HOME`):
 
 ### History Database Schema
 
-The SQLite database uses WAL journal mode for safe concurrent reads. Schema version is tracked in a `metadata` table for future migrations.
+The SQLite database uses WAL journal mode for safe concurrent reads. Schema version is tracked in a `metadata` table for future migrations. For encryption details, size masking, and backup instructions, see [database.md](database.md).
 
 Each clip stores:
 
@@ -203,4 +205,4 @@ Each clip stores:
 | `preview` | TEXT | Truncated text preview for `--list` |
 | `source` | TEXT | Origin: `pipe`, `clipboard`, `test` |
 | `encrypted` | INTEGER | 1 if content is encrypted |
-| `sensitive` | INTEGER | Reserved for future auto-expiry |
+| `encrypted_meta` | BLOB | Encrypted JSON metadata for encrypted clips (NULL otherwise). See [database.md](database.md) |

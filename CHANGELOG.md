@@ -5,7 +5,7 @@ All notable changes to teeclip will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.2.2-alpha] - 2026-02-17
+## [0.2.2] - 2026-02-17
 
 ### Added
 
@@ -18,16 +18,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `--list-count` replaced by `--list [N]` — simplified CLI, no longer needs a separate flag
 - `--no-clipboard` now correctly saves to history (was skipping history save because it was nested inside the clipboard-copy conditional)
 
 ### Security
 
 - **HMAC-keyed hashing**: Encrypted clips use HMAC-SHA-256 (keyed with the encryption key) instead of bare SHA-256 — prevents offline plaintext fingerprinting by attackers with database access
 - **Size masking**: Encrypted clips mask the size with a per-clip key-derived value — looks random without the key, recoverable with it
+- **Content-type masking**: Encrypted entries store `(encrypted)` as `content_type` — prevents leaking MIME type metadata to attackers with database access
+- **Encrypted metadata blob**: New `encrypted_meta` column stores content-type and other metadata as an AES-256-GCM encrypted JSON blob, making it recoverable on decrypt without leaking information at rest
+- **Removed `sensitive` column**: Previously reserved but unused — its existence would signal attackers which rows to target. Per-row flags now belong inside `encrypted_meta` where they're invisible without the key
 - **SQLite VACUUM**: Runs after encrypt, decrypt, and clear operations to scrub residual plaintext from free database pages
 
 ### Changed
 
+- `--list [N]` now accepts an optional count argument, replacing `--list-count N`. Default count configurable via `history.list_count` in config
+- `--list` now shows compact `[E]` marker between timestamp and preview for encrypted entries (was trailing `[encrypted]`)
 - `--encrypt` / `--decrypt` no longer prompt for password when `auth_method = "os"` — uses OS-managed key instead
 - `--get N` decrypts transparently with OS auth (no password prompt)
 - `--list` decrypts preview text on the fly for OS auth users (preview stored as `(encrypted)` on disk)
@@ -87,7 +93,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `-q` / `--quiet` to suppress warnings
 - File output support (like standard `tee`)
 
-[0.2.2-alpha]: https://github.com/DazzleTools/teeclip/compare/v0.2.1a1...HEAD
+[0.2.2]: https://github.com/DazzleTools/teeclip/compare/v0.1.1...v0.2.2
 [0.2.1-alpha]: https://github.com/DazzleTools/teeclip/compare/v0.2.0a1...v0.2.1a1
 [0.2.0-alpha]: https://github.com/DazzleTools/teeclip/compare/v0.1.1...v0.2.0a1
 [0.1.1]: https://github.com/DazzleTools/teeclip/compare/v0.1.0...v0.1.1

@@ -218,7 +218,7 @@ def test_entry_has_expected_fields(history_store):
     assert entry.preview == "field test"
     assert entry.source == "unit-test"
     assert entry.encrypted is False
-    assert entry.sensitive is False
+    assert entry.encrypted_meta is None
 
 
 def test_entry_timestamp_is_iso(history_store):
@@ -305,7 +305,7 @@ def test_schema_version_stored(history_store):
         "SELECT value FROM metadata WHERE key = 'schema_version'"
     ).fetchone()
     assert row is not None
-    assert row["value"] == "1"
+    assert row["value"] == "2"
 
 
 def test_created_at_stored(history_store):

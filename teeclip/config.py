@@ -21,6 +21,7 @@ _DEFAULTS = {
         "max_entries": 50,
         "auto_save": True,
         "preview_length": 80,
+        "list_count": 10,
     },
     "clipboard": {
         "backend": "",
@@ -43,6 +44,7 @@ class Config:
     history_max_entries: int = 50
     history_auto_save: bool = True
     history_preview_length: int = 80
+    history_list_count: int = 10
     clipboard_backend: str = ""
     output_quiet: bool = False
     security_encryption: str = "none"
@@ -119,6 +121,7 @@ def _build_config(parsed: dict) -> Config:
         history_max_entries=_get("history", "max_entries", _DEFAULTS["history"]["max_entries"]),
         history_auto_save=_get("history", "auto_save", _DEFAULTS["history"]["auto_save"]),
         history_preview_length=_get("history", "preview_length", _DEFAULTS["history"]["preview_length"]),
+        history_list_count=_get("history", "list_count", _DEFAULTS["history"]["list_count"]),
         clipboard_backend=_get("clipboard", "backend", _DEFAULTS["clipboard"]["backend"]),
         output_quiet=_get("output", "quiet", _DEFAULTS["output"]["quiet"]),
         security_encryption=_get("security", "encryption", _DEFAULTS["security"]["encryption"]),
@@ -138,6 +141,7 @@ def format_config(config: Config, config_path: Optional[Path] = None) -> str:
         f"  max_entries = {config.history_max_entries}",
         f"  auto_save = {str(config.history_auto_save).lower()}",
         f"  preview_length = {config.history_preview_length}",
+        f"  list_count = {config.history_list_count}",
         "",
         "[clipboard]",
         f"  backend = {config.clipboard_backend or '(auto)'}",

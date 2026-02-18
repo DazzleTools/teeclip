@@ -7,22 +7,43 @@
 [![GitHub Discussions](https://img.shields.io/github/discussions/DazzleTools/teeclip)](https://github.com/DazzleTools/teeclip/discussions)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](docs/platform-support.md)
 
-Like Unix `tee`, but for your clipboard. Pipe any command's output to both stdout and the system clipboard simultaneously.
+Like Unix `tee`, but for your clipboard — with history and encryption. One command, every platform.
 
-## Overview
+## Why teeclip?
 
-`teeclip` reads from stdin and writes to stdout — just like `tee` — but instead of (or in addition to) writing to a file, it copies the output to your system clipboard. No more `| pbcopy`, `| xclip`, or `| clip.exe` — one tool, every platform.
+Platform clipboard tools (`clip.exe`, `pbcopy`, `xclip`) are **sinks** — they consume stdin and produce no output. That means `cmd | clip | tee` doesn't work the way you'd expect: `clip` eats the data and nothing reaches `tee`.
+
+```bash
+# What you'd expect to work (but doesn't):
+echo hello | clip | tee output.txt       # output.txt is EMPTY — clip ate stdin
+
+# The workaround (but you lose stdout):
+echo hello | tee output.txt | clip       # works, but you can't see the output
+
+# With teeclip — stdout + clipboard + file, one command:
+echo hello | teeclip output.txt
+```
+
+teeclip is a **filter**, not a sink. Data flows through it to stdout while being copied to the clipboard. It also keeps an encrypted local history so you can recall past clips, and it works identically on Windows, macOS, Linux, and WSL — your scripts stay portable.
+
+| Task | Without teeclip | With teeclip |
+|------|----------------|--------------|
+| Copy + see output | `cmd \| tee /dev/tty \| clip` | `cmd \| teeclip` |
+| Copy + file + stdout | `cmd \| tee file \| tee /dev/tty \| clip` | `cmd \| teeclip file` |
+| Recall a previous copy | Not possible | `teeclip --get 2` |
+| Encrypted history at rest | Not possible | Automatic with config |
+| Same script, any OS | Requires platform detection | Just works |
 
 ## Features
 
 - **Tee-style pass-through**: stdin flows to stdout unmodified while being copied to clipboard
 - **Clipboard history**: Automatically saves piped content to a local SQLite database
 - **History recall**: Browse (`--list`), retrieve (`--get N`), and manage (`--clear`) past clips
-- **Optional encryption**: AES-256-GCM encryption for stored clips via `pip install teeclip[secure]`
+- **Encrypted storage**: AES-256-GCM encryption with OS-integrated key management (DPAPI, Keychain, Secret Service)
+- **Cross-platform**: Windows, macOS, Linux (X11 + Wayland), and WSL — auto-detected, one command everywhere
 - **Configurable**: `~/.teeclip/config.toml` for persistent settings (history size, encryption, backend)
-- **Cross-platform**: Windows, macOS, Linux (X11 + Wayland), and WSL — auto-detected
 - **Zero core dependencies**: Uses only Python stdlib and native OS clipboard commands
-- **File output too**: Supports writing to files just like standard `tee`
+- **File output**: Supports writing to files just like standard `tee`
 - **Paste mode**: Read clipboard contents back to stdout with `--paste`
 
 ## Installation
@@ -99,7 +120,7 @@ teeclip --encrypt
 
 ```
 usage: teeclip [-h] [-a] [--paste] [--backend NAME] [--no-clipboard] [-q]
-               [--list] [--list-count N] [--get N] [--clear [SELECTOR]]
+               [--list [N]] [--get N] [--clear [SELECTOR]]
                [--save] [--config] [--no-history] [--encrypt] [--decrypt]
                [-V] [FILE ...]
 
@@ -113,8 +134,8 @@ options:
   --no-clipboard, -nc
                     skip clipboard (act as plain tee)
   -q, --quiet       suppress warning messages
-  --list, -l        show recent clipboard history
-  --list-count N    number of entries to show with --list (default: 10)
+  --list [N], -l [N]
+                    show recent clipboard history (default: 10)
   --get N, -g N     retrieve Nth clip from history (1 = most recent)
   --clear [SELECTOR]
                     delete history entries (all, or by index/range/combo)
@@ -126,7 +147,7 @@ options:
   -V, --version     show version and exit
 ```
 
-For detailed documentation on all options and the config file, see [docs/configuration.md](docs/configuration.md).
+For detailed documentation on all options and the config file, see [docs/configuration.md](docs/configuration.md). For database internals and encryption details, see [docs/database.md](docs/database.md).
 
 ## Contributions
 
